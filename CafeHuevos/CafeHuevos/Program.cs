@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using CafeHuevos;
+using CafeHuevos.AsincronoCancellation;
+using CafeHuevos.AsincronoNormal;
 using Serilog;
 using static System.Console;
 
@@ -17,6 +19,8 @@ OutputEncoding = Encoding.UTF8;
 var sincrono = new Sincrono();
 var asincronoMal = new AsincronoMal();
 var asincronoPro = new AsincronoPro();
+var asincronoMalCancellation = new AsincronoMalCancellation();
+var asincronoProCancellation = new AsincronoProCancellation();
 var cronometro = new Stopwatch();
 const string CafeFrio = "El cafe se ha enfriado, no puedo tomarlo.";
 const string CafeCaliente = "El cafe aun esta caliente, puedo tomarlo.";
@@ -30,6 +34,8 @@ async Task Main() {
     MostrarSincrono();
     await MostrarAsincronoMal();
     await MostrarAsincronoPro();
+    await MostrarAsincronoMalCancellation();
+    await MostrarAsincronoProCancellation();
 }
 
 void MostrarSincrono() {
@@ -43,7 +49,7 @@ void MostrarSincrono() {
     sincrono.UntarMermelada();
     sincrono.PrepararZumo();
     cronometro.Stop();
-    WriteLine("Proceso terminado");
+    WriteLine("Proceso Síncrono terminado");
     WriteLine($"Tiempo total: {cronometro.ElapsedMilliseconds} milisegundos.");
     var estadoCafe = cronometro.ElapsedMilliseconds > 500 ? CafeFrio : CafeCaliente;
     WriteLine(estadoCafe);
@@ -61,7 +67,7 @@ async Task MostrarAsincronoMal() {
     await asincronoMal.UntarMermelada();
     await asincronoMal.PrepararZumo();
     cronometro.Stop();
-    WriteLine("Proceso terminado");
+    WriteLine("Proceso AsíncronoMal terminado");
     WriteLine($"Tiempo total: {cronometro.ElapsedMilliseconds} milisegundos.");
     var estadoCafe = cronometro.ElapsedMilliseconds > 500 ? CafeFrio : CafeCaliente;
     WriteLine(estadoCafe);
@@ -78,9 +84,55 @@ async Task MostrarAsincronoPro() {
     /*await Task.WhenAll(asincronoPro.PrepararCafe(), asincronoPro.CalentarSarten(), asincronoPro.PrepararZumo());
     await Task.WhenAll(asincronoPro.FreirHuevo(), asincronoPro.FreirBacon(), asincronoPro.UntarMermelada());*/
     cronometro.Stop();
-    WriteLine("Proceso terminado");
+    WriteLine("Proceso AsíncronoPro terminado");
     WriteLine($"Tiempo total: {cronometro.ElapsedMilliseconds} milisegundos.");
     var estadoCafe = cronometro.ElapsedMilliseconds > 500 ? CafeFrio : CafeCaliente;
     WriteLine(estadoCafe);
+    WriteLine();
+}
+
+async Task MostrarAsincronoMalCancellation() {
+    Log.Debug("[PROGRAM] Iniciando Asíncrono Mal (Cancelación)");
+    using var cts = new CancellationTokenSource(500);
+    cronometro.Restart();
+    try {
+        await asincronoMalCancellation.PrepararCafe(cts.Token);
+        await asincronoMalCancellation.CalentarSarten(cts.Token);
+        await asincronoMalCancellation.FreirHuevo(cts.Token);
+        await asincronoMalCancellation.FreirBacon(cts.Token);
+        await asincronoMalCancellation.TostarPan(cts.Token);
+        await asincronoMalCancellation.UntarMermelada(cts.Token);
+        await asincronoMalCancellation.PrepararZumo(cts.Token);
+    }
+    catch (OperationCanceledException) {
+        WriteLine("⛔ Proceso cancelado (500 ms)");
+    }
+
+    cronometro.Stop();
+    WriteLine("Proceso AsíncronoMalCancellation terminado");
+    WriteLine($"Tiempo: {cronometro.ElapsedMilliseconds} ms");
+    WriteLine();
+}
+
+async Task MostrarAsincronoProCancellation() {
+    Log.Debug("[PROGRAM] Iniciando Asíncrono Pro (Cancelación)");
+    using var cts = new CancellationTokenSource(500);
+    cronometro.Restart();
+    try {
+        var pan = asincronoProCancellation.TostarPan(cts.Token)
+            .ContinueWith(_ => asincronoProCancellation.UntarMermelada(cts.Token)).Unwrap();
+        var sarten = asincronoProCancellation.CalentarSarten(cts.Token)
+            .ContinueWith(_ => Task.WhenAll(asincronoProCancellation.FreirHuevo(cts.Token),
+                asincronoProCancellation.FreirBacon(cts.Token))).Unwrap();
+        await Task.WhenAll(asincronoProCancellation.PrepararCafe(cts.Token), pan, sarten,
+            asincronoProCancellation.PrepararZumo(cts.Token));
+    }
+    catch (OperationCanceledException) {
+        WriteLine("⛔ Proceso cancelado (500 ms)");
+    }
+
+    cronometro.Stop();
+    WriteLine("Proceso AsíncronoProCancellation terminado");
+    WriteLine($"Tiempo: {cronometro.ElapsedMilliseconds} ms");
     WriteLine();
 }
